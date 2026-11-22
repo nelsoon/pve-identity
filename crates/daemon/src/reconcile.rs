@@ -167,6 +167,17 @@ impl Reconciler {
             }
         }
 
+        // Modes of destroyed guests (R24).
+        if modes.keys().any(|id| !vl.contains_key(id)) {
+            let keep: String = modes
+                .iter()
+                .filter(|(id, _)| vl.contains_key(id))
+                .map(|(id, m)| format!("{id}: {}\n", m.as_str()))
+                .collect();
+            let data = format!("# pve-identity per-guest mode (default: auto)\n{keep}");
+            let _ = registry::write_if_changed(&ctx.paths.guests_cfg(), data.as_bytes(), 0o640);
+        }
+
         let mut want_ct_dirs = BTreeSet::new();
         for (&vmid, e) in &vl {
             let pool = pools.get(&vmid).cloned();
