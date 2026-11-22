@@ -9,7 +9,7 @@ pub mod reconcile;
 pub mod vsock;
 
 pub fn log(msg: impl AsRef<str>) {
-    println!("{}", msg.as_ref());
+    eprintln!("{}", msg.as_ref());
 }
 
 /// Run a command, returning stdout or an error with stderr.
