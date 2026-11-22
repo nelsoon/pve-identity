@@ -1,0 +1,20 @@
+PVE_IDENTITY_INTEGRATE_EOF
+    restart=0
+    [ "$1" = "configure" ] && restart=1
+    if [ -f "$PREFIX/var/lib/pve-identity/changed" ]; then
+        rm -f "$PREFIX/var/lib/pve-identity/changed"
+        restart=1
+    fi
+    if [ -z "$PREFIX" ] && [ -d /run/systemd/system ]; then
+        if [ "$1" = "configure" ]; then
+            systemctl daemon-reload || true
+            systemctl enable pve-identityd.service >/dev/null 2>&1 || true
+            systemctl restart pve-identityd.service || true
+        fi
+        if [ "$restart" = 1 ]; then
+            systemctl try-restart pvedaemon.service pveproxy.service >/dev/null 2>&1 || true
+        fi
+    fi
+    ;;
+esac
+exit 0

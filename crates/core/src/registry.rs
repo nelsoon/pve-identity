@@ -10,7 +10,9 @@ pub struct Paths {
 
 impl Default for Paths {
     fn default() -> Self {
-        Paths { root: PathBuf::from("/etc/pve") }
+        Paths {
+            root: PathBuf::from("/etc/pve"),
+        }
     }
 }
 
@@ -71,9 +73,16 @@ impl Settings {
             if l.starts_with('#') || l.is_empty() {
                 continue;
             }
-            let Some((k, v)) = l.split_once(':') else { continue };
+            let Some((k, v)) = l.split_once(':') else {
+                continue;
+            };
             let v = v.trim();
-            let list = || v.split([',', ' ']).filter(|x| !x.is_empty()).map(String::from).collect();
+            let list = || {
+                v.split([',', ' '])
+                    .filter(|x| !x.is_empty())
+                    .map(String::from)
+                    .collect()
+            };
             match k.trim() {
                 "issuer" => o.issuer = Some(v.trim_end_matches('/').to_string()),
                 "cluster" => o.cluster = Some(v.to_string()),
@@ -87,20 +96,28 @@ impl Settings {
         o
     }
     pub fn load(p: &Paths) -> Settings {
-        std::fs::read_to_string(p.settings()).map(|s| Settings::parse(&s)).unwrap_or_default()
+        std::fs::read_to_string(p.settings())
+            .map(|s| Settings::parse(&s))
+            .unwrap_or_default()
     }
 }
 
 pub fn valid_name(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 128
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || "-._:".contains(c))
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-._:".contains(c))
         && !s.starts_with('.')
 }
 
 /// Registered audiences: audiences.d/<aud>.json plus operator ones (R16).
 pub fn audiences(p: &Paths, s: &Settings) -> Vec<String> {
-    let mut v: Vec<String> = s.audiences.iter().filter(|a| valid_name(a)).cloned().collect();
+    let mut v: Vec<String> = s
+        .audiences
+        .iter()
+        .filter(|a| valid_name(a))
+        .cloned()
+        .collect();
     if let Ok(rd) = std::fs::read_dir(p.audiences()) {
         for e in rd.flatten() {
             let n = e.file_name().to_string_lossy().to_string();
@@ -178,7 +195,9 @@ pub fn gen_path(p: &Paths, vmid: u32) -> PathBuf {
     p.gen_dir().join(format!("{vmid}.json"))
 }
 pub fn load_gen(p: &Paths, vmid: u32) -> Option<GenRecord> {
-    std::fs::read(gen_path(p, vmid)).ok().and_then(|d| serde_json::from_slice(&d).ok())
+    std::fs::read(gen_path(p, vmid))
+        .ok()
+        .and_then(|d| serde_json::from_slice(&d).ok())
 }
 pub fn save_gen(p: &Paths, vmid: u32, g: &GenRecord) -> crate::Result<()> {
     std::fs::create_dir_all(p.gen_dir())?;
@@ -195,7 +214,11 @@ pub fn mint_gen() -> String {
 }
 
 /// issuers.d/pve.json content (R15, D13).
-pub fn issuer_doc(iss: &str, cluster: &str, ks: &crate::keys::KeySet) -> crate::Result<serde_json::Value> {
+pub fn issuer_doc(
+    iss: &str,
+    cluster: &str,
+    ks: &crate::keys::KeySet,
+) -> crate::Result<serde_json::Value> {
     let thumbs: Vec<_> = ks.keys.iter().filter_map(|k| k.thumbprint()).collect();
     Ok(serde_json::json!({
         "name": "pve",

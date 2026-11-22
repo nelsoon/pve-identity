@@ -82,31 +82,51 @@ impl Ctx {
         registry::audiences(&self.paths, &self.settings.read().unwrap())
     }
     pub fn mode(&self, vmid: u32) -> Mode {
-        registry::load_modes(&self.paths).get(&vmid).copied().unwrap_or_default()
+        registry::load_modes(&self.paths)
+            .get(&vmid)
+            .copied()
+            .unwrap_or_default()
     }
     pub fn conf_path(&self, node: &str, kind: &Kind, vmid: u32) -> std::path::PathBuf {
         let dir = match kind {
             Kind::Qemu => "qemu-server",
             Kind::Lxc => "lxc",
         };
-        self.paths.root.join("nodes").join(node).join(dir).join(format!("{vmid}.conf"))
+        self.paths
+            .root
+            .join("nodes")
+            .join(node)
+            .join(dir)
+            .join(format!("{vmid}.conf"))
     }
 
     /// Host-side truth for a guest that lives on this node.
     pub fn guest(&self, vmid: u32) -> Result<(Guest, pvecfg::GuestConf)> {
         let vl = pvecfg::vmlist(&self.paths.root);
-        let e = vl.get(&vmid).ok_or_else(|| Error::Refused(format!("{vmid}: unknown guest")))?;
+        let e = vl
+            .get(&vmid)
+            .ok_or_else(|| Error::Refused(format!("{vmid}: unknown guest")))?;
         if e.node != self.node {
             return Err(Error::Refused(format!("{vmid}: not on this node")));
         }
-        let conf = pvecfg::GuestConf::parse(&std::fs::read_to_string(self.conf_path(&e.node, &e.kind, vmid))?);
-        let pools = pvecfg::pools(&std::fs::read_to_string(self.paths.root.join("user.cfg")).unwrap_or_default());
+        let conf = pvecfg::GuestConf::parse(&std::fs::read_to_string(
+            self.conf_path(&e.node, &e.kind, vmid),
+        )?);
+        let pools = pvecfg::pools(
+            &std::fs::read_to_string(self.paths.root.join("user.cfg")).unwrap_or_default(),
+        );
         let pool = pools.get(&vmid).cloned();
         let gen = registry::load_gen(&self.paths, vmid)
             .filter(|g| Some(&g.pool) == pool.as_ref() && g.kind == e.kind.as_str())
             .map(|g| g.gen);
-        let zmap = pvecfg::vnet_zones(&std::fs::read_to_string(self.paths.root.join("sdn/vnets.cfg")).unwrap_or_default());
-        let mut zones: Vec<String> = conf.bridges().iter().filter_map(|b| zmap.get(b).cloned()).collect();
+        let zmap = pvecfg::vnet_zones(
+            &std::fs::read_to_string(self.paths.root.join("sdn/vnets.cfg")).unwrap_or_default(),
+        );
+        let mut zones: Vec<String> = conf
+            .bridges()
+            .iter()
+            .filter_map(|b| zmap.get(b).cloned())
+            .collect();
         zones.sort();
         zones.dedup();
         Ok((
@@ -129,7 +149,10 @@ impl Ctx {
         let r = self.issue_inner(vmid, aud, channel);
         match &r {
             Ok(_) => {}
-            Err(e) => crate::log(format!("refuse vmid={vmid} aud={aud} channel={} reason=\"{e}\"", channel.as_str())),
+            Err(e) => crate::log(format!(
+                "refuse vmid={vmid} aud={aud} channel={} reason=\"{e}\"",
+                channel.as_str()
+            )),
         }
         r
     }
@@ -137,24 +160,32 @@ impl Ctx {
     fn issue_inner(&self, vmid: u32, aud: &str, channel: Channel) -> Result<(String, u64)> {
         let (g, _) = self.guest(vmid)?;
         let mode = self.mode(vmid);
-        let ok = match (channel, mode) {
-            (_, Mode::Off) => false,
-            (Channel::Vsock, Mode::Push) => false,
-            (Channel::Push, Mode::Vsock) => false,
-            _ => true,
-        };
+        let ok = !matches!(
+            (channel, mode),
+            (_, Mode::Off) | (Channel::Vsock, Mode::Push) | (Channel::Push, Mode::Vsock)
+        );
         if !ok {
-            return Err(Error::Refused(format!("mode {} forbids {}", mode.as_str(), channel.as_str())));
+            return Err(Error::Refused(format!(
+                "mode {} forbids {}",
+                mode.as_str(),
+                channel.as_str()
+            )));
         }
         if !self.audiences().iter().any(|a| a == aud) {
             return Err(Error::Refused(format!("audience {aud} not registered")));
         }
-        if matches!(channel, Channel::Vsock | Channel::CtSocket) && !self.limit.lock().unwrap().allow(vmid) {
+        if matches!(channel, Channel::Vsock | Channel::CtSocket)
+            && !self.limit.lock().unwrap().allow(vmid)
+        {
             return Err(Error::Refused("rate limited".into()));
         }
-        let iss = self.issuer().ok_or_else(|| Error::Refused("issuer not configured".into()))?;
+        let iss = self
+            .issuer()
+            .ok_or_else(|| Error::Refused("issuer not configured".into()))?;
         let ks = self.keys.read().unwrap();
-        let key = ks.current().ok_or_else(|| Error::Refused("no signing key".into()))?;
+        let key = ks
+            .current()
+            .ok_or_else(|| Error::Refused("no signing key".into()))?;
         let c = claims::build(&g, &iss, aud, pve_identity_core::now(), self.lifetime())?;
         let tok = jwt::sign_es256(&key.signing_key()?, &key.kid, &c)?;
         crate::log(format!(
@@ -169,9 +200,13 @@ impl Ctx {
     }
 }
 
-
 /// Answer one guest-facing HTTP request for an already-identified guest.
-pub fn serve_guest<S: std::io::Read + std::io::Write>(ctx: &Ctx, s: &mut S, vmid: u32, ch: Channel) {
+pub fn serve_guest<S: std::io::Read + std::io::Write>(
+    ctx: &Ctx,
+    s: &mut S,
+    vmid: u32,
+    ch: Channel,
+) {
     use pve_identity_core::http::{read_request, respond, respond_json};
     let Ok(req) = read_request(s) else { return };
     let _ = match req.path.as_str() {
@@ -184,7 +219,9 @@ pub fn serve_guest<S: std::io::Read + std::io::Write>(ctx: &Ctx, s: &mut S, vmid
                         respond(s, 200, "application/jwt", t.as_bytes())
                     }
                 }
-                Err(Error::Refused(m)) if m == "rate limited" => respond(s, 429, "text/plain", b"rate limited\n"),
+                Err(Error::Refused(m)) if m == "rate limited" => {
+                    respond(s, 429, "text/plain", b"rate limited\n")
+                }
                 Err(e) => respond(s, 403, "text/plain", format!("{e}\n").as_bytes()),
             },
             None => respond(s, 400, "text/plain", b"aud required\n"),

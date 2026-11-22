@@ -12,7 +12,8 @@ pub struct Qga {
 
 impl Qga {
     pub fn connect(vmid: u32) -> Result<Qga, String> {
-        let s = UnixStream::connect(format!("/var/run/qemu-server/{vmid}.qga")).map_err(|e| format!("qga connect: {e}"))?;
+        let s = UnixStream::connect(format!("/var/run/qemu-server/{vmid}.qga"))
+            .map_err(|e| format!("qga connect: {e}"))?;
         s.set_read_timeout(Some(Duration::from_secs(5))).ok();
         s.set_write_timeout(Some(Duration::from_secs(5))).ok();
         let r = BufReader::new(s.try_clone().map_err(|e| e.to_string())?);
@@ -34,12 +35,16 @@ impl Qga {
     }
 
     fn send(&mut self, v: &Value) -> Result<(), String> {
-        self.w.write_all(format!("{v}\n").as_bytes()).map_err(|e| format!("qga write: {e}"))
+        self.w
+            .write_all(format!("{v}\n").as_bytes())
+            .map_err(|e| format!("qga write: {e}"))
     }
 
     fn read_line(&mut self) -> Result<Value, String> {
         let mut buf = Vec::new();
-        self.r.read_until(b'\n', &mut buf).map_err(|e| format!("qga read: {e}"))?;
+        self.r
+            .read_until(b'\n', &mut buf)
+            .map_err(|e| format!("qga read: {e}"))?;
         let s: Vec<u8> = buf.into_iter().filter(|&b| b != 0xff).collect();
         let t = String::from_utf8_lossy(&s);
         if t.trim().is_empty() {
@@ -93,7 +98,9 @@ impl Qga {
 }
 
 fn rand_id() -> u32 {
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
     (t.subsec_nanos() ^ std::process::id()) & 0x7fff_ffff
 }
 
@@ -117,6 +124,9 @@ mod tests {
         let c = |s: &str| super::classify(&serde_json::from_str(s).unwrap());
         assert_eq!(c(r#"{"id":"debian","name":"Debian GNU/Linux"}"#), "linux");
         assert_eq!(c(r#"{"id":"freebsd","name":"FreeBSD"}"#), "freebsd");
-        assert_eq!(c(r#"{"id":"mswindows","name":"Microsoft Windows 11"}"#), "windows");
+        assert_eq!(
+            c(r#"{"id":"mswindows","name":"Microsoft Windows 11"}"#),
+            "windows"
+        );
     }
 }

@@ -119,7 +119,10 @@ mod tests {
     }
     #[test]
     fn no_pool_refused() {
-        assert!(matches!(build(&guest(None), "i", "s3", 0, 300), Err(crate::Error::Refused(_))));
+        assert!(matches!(
+            build(&guest(None), "i", "s3", 0, 300),
+            Err(crate::Error::Refused(_))
+        ));
     }
     #[test]
     fn lifetime_capped() {

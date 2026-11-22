@@ -34,7 +34,9 @@ fn added_marker(ctx: &Ctx, vmid: u32) -> PathBuf {
 }
 
 fn qemu_pid(vmid: u32) -> Option<String> {
-    std::fs::read_to_string(format!("/var/run/qemu-server/{vmid}.pid")).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(format!("/var/run/qemu-server/{vmid}.pid"))
+        .ok()
+        .map(|s| s.trim().to_string())
         .filter(|p| std::path::Path::new(&format!("/proc/{p}")).exists())
 }
 
@@ -56,7 +58,17 @@ PVE::LXC::Config->lock_config($id, sub {
   PVE::LXC::Config->write_config($id, $c);
 });
 "#;
-    crate::run("perl", &["-e", script, &vmid.to_string(), &entry, if add { "1" } else { "0" }]).map(|_| ())
+    crate::run(
+        "perl",
+        &[
+            "-e",
+            script,
+            &vmid.to_string(),
+            &entry,
+            if add { "1" } else { "0" },
+        ],
+    )
+    .map(|_| ())
 }
 
 fn qm_set_args(vmid: u32, args: &str) -> Result<(), String> {
@@ -69,7 +81,11 @@ fn qm_set_args(vmid: u32, args: &str) -> Result<(), String> {
 
 impl Reconciler {
     pub fn new(ctx: Arc<Ctx>) -> Reconciler {
-        Reconciler { ctx, cts: CtSockets::default(), st: Default::default() }
+        Reconciler {
+            ctx,
+            cts: CtSockets::default(),
+            st: Default::default(),
+        }
     }
 
     /// One pass; cheap when nothing changed (only refresh timers run).
@@ -132,7 +148,8 @@ impl Reconciler {
         let ctx = &self.ctx;
         let root = &ctx.paths.root;
         let vl = pvecfg::vmlist(root);
-        let pools = pvecfg::pools(&std::fs::read_to_string(root.join("user.cfg")).unwrap_or_default());
+        let pools =
+            pvecfg::pools(&std::fs::read_to_string(root.join("user.cfg")).unwrap_or_default());
         let modes = registry::load_modes(&ctx.paths);
         let mut status = BTreeMap::new();
 
@@ -163,7 +180,9 @@ impl Reconciler {
                 continue;
             }
             let path = ctx.conf_path(&e.node, &e.kind, vmid);
-            let Ok(raw) = std::fs::read_to_string(&path) else { continue };
+            let Ok(raw) = std::fs::read_to_string(&path) else {
+                continue;
+            };
             let conf = pvecfg::GuestConf::parse(&raw);
             if conf.is_template() {
                 continue;
@@ -184,17 +203,34 @@ impl Reconciler {
                 let uuid = conf.smbios_uuid().unwrap_or_default();
                 let cur = registry::load_gen(&ctx.paths, vmid);
                 let p = pool.clone().unwrap_or_default();
-                let keep = cur.as_ref().is_some_and(|g| g.pool == p && g.kind == e.kind.as_str() && (g.uuid == uuid));
+                let keep = cur
+                    .as_ref()
+                    .is_some_and(|g| g.pool == p && g.kind == e.kind.as_str() && (g.uuid == uuid));
                 if !keep {
-                    let g = GenRecord { gen: registry::mint_gen(), pool: p, kind: e.kind.as_str().into(), uuid, minted: now() };
+                    let g = GenRecord {
+                        gen: registry::mint_gen(),
+                        pool: p,
+                        kind: e.kind.as_str().into(),
+                        uuid,
+                        minted: now(),
+                    };
                     match registry::save_gen(&ctx.paths, vmid, &g) {
-                        Ok(()) => crate::log(format!("guest {vmid}: identity minted (pool {})", g.pool)),
+                        Ok(()) => {
+                            crate::log(format!("guest {vmid}: identity minted (pool {})", g.pool))
+                        }
                         Err(er) => crate::log(format!("guest {vmid}: gen: {er}")),
                     }
                 }
             } else if registry::load_gen(&ctx.paths, vmid).is_some() {
                 registry::drop_gen(&ctx.paths, vmid);
-                crate::log(format!("guest {vmid}: identity dropped ({})", if pool.is_none() { "no pool" } else { "mode off" }));
+                crate::log(format!(
+                    "guest {vmid}: identity dropped ({})",
+                    if pool.is_none() {
+                        "no pool"
+                    } else {
+                        "mode off"
+                    }
+                ));
             }
             status.insert(vmid, s);
         }
@@ -221,7 +257,14 @@ impl Reconciler {
         self.write_status();
     }
 
-    fn converge_vm(&self, vmid: u32, conf: &pvecfg::GuestConf, active: bool, mode: Mode, s: &mut serde_json::Value) {
+    fn converge_vm(
+        &self,
+        vmid: u32,
+        conf: &pvecfg::GuestConf,
+        active: bool,
+        mode: Mode,
+        s: &mut serde_json::Value,
+    ) {
         let ctx = &self.ctx;
         let args = conf.effective("args").unwrap_or("").to_string();
         let marker = added_marker(ctx, vmid);
@@ -232,7 +275,10 @@ impl Reconciler {
                 let had = pvecfg::vsock_cid(&args).is_some();
                 match qm_set_args(vmid, &new) {
                     Ok(()) => {
-                        crate::log(format!("vm {vmid}: vsock {} (cid {vmid})", if had { "CID fixed" } else { "added" }));
+                        crate::log(format!(
+                            "vm {vmid}: vsock {} (cid {vmid})",
+                            if had { "CID fixed" } else { "added" }
+                        ));
                         if !had {
                             let _ = std::fs::create_dir_all(marker.parent().unwrap());
                             let _ = std::fs::write(&marker, b"");
@@ -299,7 +345,13 @@ impl Reconciler {
         }
     }
 
-    fn converge_ct(&self, vmid: u32, conf: &pvecfg::GuestConf, active: bool, s: &mut serde_json::Value) {
+    fn converge_ct(
+        &self,
+        vmid: u32,
+        conf: &pvecfg::GuestConf,
+        active: bool,
+        s: &mut serde_json::Value,
+    ) {
         let want = ct::mount_entry(vmid);
         let has_ours: Vec<&str> = conf
             .lines
@@ -315,7 +367,9 @@ impl Reconciler {
             }
         } else if !active && !has_ours.is_empty() {
             match lxc_mount(vmid, false) {
-                Ok(()) => crate::log(format!("ct {vmid}: /dev/pve-identity mount removed (applies at restart)")),
+                Ok(()) => crate::log(format!(
+                    "ct {vmid}: /dev/pve-identity mount removed (applies at restart)"
+                )),
                 Err(e) => crate::log(format!("ct {vmid}: cannot remove mount: {e}")),
             }
         }
@@ -343,19 +397,25 @@ impl Reconciler {
         let half = (self.ctx.lifetime() / 2).max(30);
         let mut changed = false;
         for (vmid, s) in due {
-            let chans: Vec<String> = s["channels"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+            let chans: Vec<String> = s["channels"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
             let running = s["running"].as_bool().unwrap_or(false);
-            let mut next = t + half;
+            let mut next = 0;
             let mut result: Option<Result<String, String>> = None;
             if running && chans.iter().any(|c| c == "qga-push") {
                 result = Some(crate::push::push(&self.ctx, vmid).map(|os| format!("ok ({os})")));
             } else if running && chans.iter().any(|c| c == "ct-files") && s["kind"] == "lxc" {
-                result = Some(ct::write_tokens(&self.ctx, vmid).map(|n| format!("ok ({n} audiences)")));
+                result =
+                    Some(ct::write_tokens(&self.ctx, vmid).map(|n| format!("ok ({n} audiences)")));
             }
             if let Some(r) = result {
-                if r.is_err() {
-                    next = t + 30;
-                }
+                next = if r.is_err() { t + 30 } else { t + half };
                 let txt = r.unwrap_or_else(|e| format!("error: {e}"));
                 if txt.starts_with("error") {
                     crate::log(format!("guest {vmid}: refresh {txt}"));
@@ -367,7 +427,11 @@ impl Reconciler {
                     changed = true;
                 }
             }
-            self.st.lock().unwrap().next_refresh.insert(vmid, next);
+            if next > 0 {
+                self.st.lock().unwrap().next_refresh.insert(vmid, next);
+            } else {
+                self.st.lock().unwrap().next_refresh.remove(&vmid);
+            }
         }
         if changed {
             self.write_status();
@@ -389,6 +453,10 @@ impl Reconciler {
                 v
             }).collect::<Vec<_>>(),
         });
-        let _ = registry::write_if_changed(&self.ctx.paths.node_state(&self.ctx.node), &serde_json::to_vec_pretty(&doc).unwrap_or_default(), 0o640);
+        let _ = registry::write_if_changed(
+            &self.ctx.paths.node_state(&self.ctx.node),
+            &serde_json::to_vec_pretty(&doc).unwrap_or_default(),
+            0o640,
+        );
     }
 }

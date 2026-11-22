@@ -59,7 +59,8 @@ pub fn new_key(state: State, now: u64) -> crate::Result<Key> {
 
 impl Key {
     pub fn signing_key(&self) -> crate::Result<SigningKey> {
-        SigningKey::from_pkcs8_pem(&self.private).map_err(|e| crate::Error::Invalid(format!("key {}: {e}", self.kid)))
+        SigningKey::from_pkcs8_pem(&self.private)
+            .map_err(|e| crate::Error::Invalid(format!("key {}: {e}", self.kid)))
     }
     pub fn verifying_key(&self) -> crate::Result<VerifyingKey> {
         Ok(*self.signing_key()?.verifying_key())
@@ -128,7 +129,8 @@ impl KeySet {
     /// any host may run it.
     pub fn advance(&mut self, now: u64) -> bool {
         let before = serde_json::to_string(self).unwrap_or_default();
-        self.keys.retain(|k| !(k.state == State::Previous && k.retire_at <= now));
+        self.keys
+            .retain(|k| !(k.state == State::Previous && k.retire_at <= now));
         let ready = self
             .keys
             .iter()
@@ -151,7 +153,9 @@ mod tests {
     use super::*;
     #[test]
     fn rotation_overlap() {
-        let mut ks = KeySet { keys: vec![new_key(State::Current, 0).unwrap()] };
+        let mut ks = KeySet {
+            keys: vec![new_key(State::Current, 0).unwrap()],
+        };
         let old = ks.keys[0].kid.clone();
         ks.keys.push(new_key(State::Next, 1000).unwrap());
         assert!(!ks.advance(1000 + PREPUBLISH_SECS - 1));

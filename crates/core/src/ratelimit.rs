@@ -11,7 +11,11 @@ pub struct RateLimit {
 impl RateLimit {
     /// `per_min` tokens per minute, `burst` max.
     pub fn new(per_min: u32, burst: u32) -> Self {
-        RateLimit { rate: per_min as f64 / 60.0, burst: burst as f64, buckets: HashMap::new() }
+        RateLimit {
+            rate: per_min as f64 / 60.0,
+            burst: burst as f64,
+            buckets: HashMap::new(),
+        }
     }
     pub fn allow(&mut self, vmid: u32) -> bool {
         self.allow_at(vmid, Instant::now())

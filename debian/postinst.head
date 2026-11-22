@@ -1,0 +1,11 @@
+#!/bin/sh
+# pve-identity-manager postinst: apply the INTEGRATION.md points
+# (embedded from debian/integrate.pl), start pve-identityd, and restart the
+# PVE API daemons when something changed. Also runs on the dpkg trigger
+# fired when pve-manager replaces the patched files. Integration failures
+# warn but never fail the install.
+set -e
+PREFIX="${DPKG_ROOT:-}"
+case "$1" in
+configure|triggered)
+    perl - apply "$PREFIX" <<'PVE_IDENTITY_INTEGRATE_EOF' || true

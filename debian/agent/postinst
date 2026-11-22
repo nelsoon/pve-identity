@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    getent group pve-identity >/dev/null || groupadd --system pve-identity
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        systemctl enable pve-identity-agent.service >/dev/null 2>&1 || true
+        systemctl restart pve-identity-agent.service || true
+    fi
+fi
+exit 0

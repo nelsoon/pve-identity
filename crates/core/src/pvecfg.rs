@@ -14,8 +14,12 @@ pub struct VmEntry {
 /// /etc/pve/.vmlist → vmid → (node, kind)
 pub fn vmlist(root: &Path) -> BTreeMap<u32, VmEntry> {
     let mut m = BTreeMap::new();
-    let Ok(d) = std::fs::read(root.join(".vmlist")) else { return m };
-    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&d) else { return m };
+    let Ok(d) = std::fs::read(root.join(".vmlist")) else {
+        return m;
+    };
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&d) else {
+        return m;
+    };
     if let Some(ids) = v["ids"].as_object() {
         for (id, e) in ids {
             let kind = match e["type"].as_str() {
@@ -24,7 +28,13 @@ pub fn vmlist(root: &Path) -> BTreeMap<u32, VmEntry> {
                 _ => continue,
             };
             if let (Ok(id), Some(node)) = (id.parse(), e["node"].as_str()) {
-                m.insert(id, VmEntry { node: node.into(), kind });
+                m.insert(
+                    id,
+                    VmEntry {
+                        node: node.into(),
+                        kind,
+                    },
+                );
             }
         }
     }
@@ -62,9 +72,11 @@ pub fn vnet_zones(s: &str) -> BTreeMap<String, String> {
 }
 
 pub fn cluster_name(corosync: &str) -> Option<String> {
-    corosync
-        .lines()
-        .find_map(|l| l.trim().strip_prefix("cluster_name:").map(|v| v.trim().to_string()))
+    corosync.lines().find_map(|l| {
+        l.trim()
+            .strip_prefix("cluster_name:")
+            .map(|v| v.trim().to_string())
+    })
 }
 
 /// Main section of a guest config (before the first `[section]`).
@@ -81,17 +93,25 @@ impl GuestConf {
         let mut section = "";
         for l in s.lines() {
             if l.starts_with('[') {
-                section = if l.starts_with("[PENDING]") { "pending" } else { "other" };
+                section = if l.starts_with("[PENDING]") {
+                    "pending"
+                } else {
+                    "other"
+                };
                 continue;
             }
             if l.starts_with('#') {
                 continue;
             }
-            let Some((k, v)) = l.split_once(':') else { continue };
+            let Some((k, v)) = l.split_once(':') else {
+                continue;
+            };
             let (k, v) = (k.trim().to_string(), v.trim().to_string());
             match section {
                 "" => c.lines.push((k, v)),
-                "pending" if k == "delete" => c.delete_pending.extend(v.split(',').map(|x| x.trim().to_string())),
+                "pending" if k == "delete" => c
+                    .delete_pending
+                    .extend(v.split(',').map(|x| x.trim().to_string())),
                 "pending" => c.pending.push((k, v)),
                 _ => {}
             }
@@ -99,25 +119,40 @@ impl GuestConf {
         c
     }
     pub fn get(&self, k: &str) -> Option<&str> {
-        self.lines.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
+        self.lines
+            .iter()
+            .find(|(a, _)| a == k)
+            .map(|(_, v)| v.as_str())
     }
     /// Value as it will be after the next restart (pending applied).
     pub fn effective(&self, k: &str) -> Option<&str> {
         if self.delete_pending.iter().any(|d| d == k) {
             return None;
         }
-        self.pending.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str()).or_else(|| self.get(k))
+        self.pending
+            .iter()
+            .find(|(a, _)| a == k)
+            .map(|(_, v)| v.as_str())
+            .or_else(|| self.get(k))
     }
     pub fn tags(&self) -> Vec<String> {
         self.get("tags")
-            .map(|t| t.split([';', ',', ' ']).filter(|x| !x.is_empty()).map(String::from).collect())
+            .map(|t| {
+                t.split([';', ',', ' '])
+                    .filter(|x| !x.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default()
     }
     pub fn bridges(&self) -> Vec<String> {
         self.lines
             .iter()
             .filter(|(k, _)| k.starts_with("net") && k[3..].chars().all(|c| c.is_ascii_digit()))
-            .filter_map(|(_, v)| v.split(',').find_map(|p| p.strip_prefix("bridge=").map(String::from)))
+            .filter_map(|(_, v)| {
+                v.split(',')
+                    .find_map(|p| p.strip_prefix("bridge=").map(String::from))
+            })
             .collect()
     }
     pub fn smbios_uuid(&self) -> Option<String> {
@@ -134,7 +169,9 @@ impl GuestConf {
 pub fn vsock_cid(args: &str) -> Option<u32> {
     let i = args.find(VSOCK_PREFIX)?;
     let dev = args[i..].split_whitespace().nth(1)?;
-    dev.split(',').find_map(|p| p.strip_prefix("guest-cid=")).and_then(|c| c.parse().ok())
+    dev.split(',')
+        .find_map(|p| p.strip_prefix("guest-cid="))
+        .and_then(|c| c.parse().ok())
 }
 
 /// Ensure `args` carries a vsock device with CID = vmid, reusing an existing
@@ -145,11 +182,18 @@ pub fn ensure_vsock(args: &str, vmid: u32) -> String {
     let mut found = false;
     let mut i = 0;
     while i < toks.len() {
-        if toks[i] == "-device" && i + 1 < toks.len() && toks[i + 1].starts_with("vhost-vsock-pci,") {
+        if toks[i] == "-device" && i + 1 < toks.len() && toks[i + 1].starts_with("vhost-vsock-pci,")
+        {
             if !found {
                 let parts: Vec<String> = toks[i + 1]
                     .split(',')
-                    .map(|p| if p.starts_with("guest-cid=") { format!("guest-cid={vmid}") } else { p.to_string() })
+                    .map(|p| {
+                        if p.starts_with("guest-cid=") {
+                            format!("guest-cid={vmid}")
+                        } else {
+                            p.to_string()
+                        }
+                    })
                     .collect();
                 let mut dev = parts.join(",");
                 if !dev.contains("guest-cid=") {
@@ -179,7 +223,10 @@ pub fn remove_vsock(args: &str) -> String {
     let mut out = Vec::new();
     let mut i = 0;
     while i < toks.len() {
-        if toks[i] == "-device" && i + 1 < toks.len() && toks[i + 1].starts_with("vhost-vsock-pci,id=vsock0,") {
+        if toks[i] == "-device"
+            && i + 1 < toks.len()
+            && toks[i + 1].starts_with("vhost-vsock-pci,id=vsock0,")
+        {
             i += 2;
             continue;
         }
@@ -200,16 +247,25 @@ mod tests {
     }
     #[test]
     fn vsock_args() {
-        assert_eq!(ensure_vsock("", 101), "-device vhost-vsock-pci,id=vsock0,guest-cid=101");
         assert_eq!(
-            ensure_vsock("-cpu host -device vhost-vsock-pci,id=vsock0,guest-cid=9000", 101),
+            ensure_vsock("", 101),
+            "-device vhost-vsock-pci,id=vsock0,guest-cid=101"
+        );
+        assert_eq!(
+            ensure_vsock(
+                "-cpu host -device vhost-vsock-pci,id=vsock0,guest-cid=9000",
+                101
+            ),
             "-cpu host -device vhost-vsock-pci,id=vsock0,guest-cid=101"
         );
         let a = ensure_vsock("-device vhost-vsock-pci,id=k8s,guest-cid=7", 105);
         assert_eq!(a, "-device vhost-vsock-pci,id=k8s,guest-cid=105");
         assert_eq!(vsock_cid(&a), Some(105));
         assert_eq!(ensure_vsock(&a, 105), a, "idempotent");
-        assert_eq!(remove_vsock("-cpu host -device vhost-vsock-pci,id=vsock0,guest-cid=1"), "-cpu host");
+        assert_eq!(
+            remove_vsock("-cpu host -device vhost-vsock-pci,id=vsock0,guest-cid=1"),
+            "-cpu host"
+        );
     }
     #[test]
     fn conf_parse() {

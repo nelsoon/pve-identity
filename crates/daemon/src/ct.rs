@@ -23,13 +23,23 @@ pub fn peer_in_ct(stream: &std::os::unix::net::UnixStream, vmid: u32) -> bool {
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
     let mut len = std::mem::size_of_val(&cred) as u32;
     let r = unsafe {
-        libc::getsockopt(stream.as_raw_fd(), libc::SOL_SOCKET, libc::SO_PEERCRED, &mut cred as *mut _ as *mut _, &mut len)
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            &mut cred as *mut _ as *mut _,
+            &mut len,
+        )
     };
     if r != 0 || cred.pid <= 0 {
         return false;
     }
     std::fs::read_to_string(format!("/proc/{}/cgroup", cred.pid))
-        .map(|c| c.lines().any(|l| l.contains(&format!("/lxc/{vmid}/")) || l.ends_with(&format!("/lxc/{vmid}"))))
+        .map(|c| {
+            c.lines().any(|l| {
+                l.contains(&format!("/lxc/{vmid}/")) || l.ends_with(&format!("/lxc/{vmid}"))
+            })
+        })
         .unwrap_or(false)
 }
 
@@ -78,8 +88,15 @@ impl CtSockets {
                 let Ok(mut s) = c else { continue };
                 let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(5)));
                 if !peer_in_ct(&s, vmid) {
-                    crate::log(format!("refuse ct-socket vmid={vmid} reason=\"peer not in CT\""));
-                    let _ = pve_identity_core::http::respond(&mut s, 403, "text/plain", b"peer not in this CT\n");
+                    crate::log(format!(
+                        "refuse ct-socket vmid={vmid} reason=\"peer not in CT\""
+                    ));
+                    let _ = pve_identity_core::http::respond(
+                        &mut s,
+                        403,
+                        "text/plain",
+                        b"peer not in this CT\n",
+                    );
                     continue;
                 }
                 serve_guest(&ctx, &mut s, vmid, Channel::CtSocket);
@@ -107,11 +124,14 @@ pub fn write_tokens(ctx: &Ctx, vmid: u32) -> Result<usize, String> {
     let auds = ctx.audiences();
     let mut n = 0;
     for aud in &auds {
-        let (t, _) = ctx.issue(vmid, aud, Channel::CtFiles).map_err(|e| e.to_string())?;
+        let (t, _) = ctx
+            .issue(vmid, aud, Channel::CtFiles)
+            .map_err(|e| e.to_string())?;
         let ad = d.join(aud);
         std::fs::create_dir_all(&ad).map_err(|e| e.to_string())?;
         let _ = std::fs::set_permissions(&ad, std::fs::Permissions::from_mode(0o755));
-        pve_identity_core::write_atomic(&ad.join("token"), t.as_bytes(), 0o644).map_err(|e| e.to_string())?;
+        pve_identity_core::write_atomic(&ad.join("token"), t.as_bytes(), 0o644)
+            .map_err(|e| e.to_string())?;
         n += 1;
     }
     // drop audiences no longer registered

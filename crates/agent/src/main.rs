@@ -19,13 +19,21 @@ struct Vs(OwnedFd);
 impl Read for Vs {
     fn read(&mut self, b: &mut [u8]) -> std::io::Result<usize> {
         let n = unsafe { libc::read(self.0.as_raw_fd(), b.as_mut_ptr() as *mut _, b.len()) };
-        if n < 0 { Err(std::io::Error::last_os_error()) } else { Ok(n as usize) }
+        if n < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(n as usize)
+        }
     }
 }
 impl Write for Vs {
     fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
         let n = unsafe { libc::write(self.0.as_raw_fd(), b.as_ptr() as *const _, b.len()) };
-        if n < 0 { Err(std::io::Error::last_os_error()) } else { Ok(n as usize) }
+        if n < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(n as usize)
+        }
     }
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
@@ -39,9 +47,18 @@ fn host_get(path: &str) -> Result<(u16, Vec<u8>), String> {
             return Err(format!("vsock: {}", std::io::Error::last_os_error()));
         }
         let ofd = OwnedFd::from_raw_fd(fd);
-        let tv = libc::timeval { tv_sec: 5, tv_usec: 0 };
+        let tv = libc::timeval {
+            tv_sec: 5,
+            tv_usec: 0,
+        };
         for o in [libc::SO_RCVTIMEO, libc::SO_SNDTIMEO] {
-            libc::setsockopt(fd, libc::SOL_SOCKET, o, &tv as *const _ as *const _, std::mem::size_of_val(&tv) as u32);
+            libc::setsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                o,
+                &tv as *const _ as *const _,
+                std::mem::size_of_val(&tv) as u32,
+            );
         }
         // Bind a reserved source port (<1024): needs CAP_NET_BIND_SERVICE in
         // the guest, so only root can ask the host (R9).
@@ -51,7 +68,12 @@ fn host_get(path: &str) -> Result<(u16, Vec<u8>), String> {
             l.svm_family = libc::AF_VSOCK as u16;
             l.svm_cid = libc::VMADDR_CID_ANY;
             l.svm_port = port;
-            if libc::bind(fd, &l as *const _ as *const libc::sockaddr, std::mem::size_of_val(&l) as u32) == 0 {
+            if libc::bind(
+                fd,
+                &l as *const _ as *const libc::sockaddr,
+                std::mem::size_of_val(&l) as u32,
+            ) == 0
+            {
                 bound = true;
                 break;
             }
@@ -66,11 +88,20 @@ fn host_get(path: &str) -> Result<(u16, Vec<u8>), String> {
         a.svm_family = libc::AF_VSOCK as u16;
         a.svm_cid = HOST_CID;
         a.svm_port = PORT;
-        if libc::connect(fd, &a as *const _ as *const libc::sockaddr, std::mem::size_of_val(&a) as u32) < 0 {
-            return Err(format!("vsock connect: {}", std::io::Error::last_os_error()));
+        if libc::connect(
+            fd,
+            &a as *const _ as *const libc::sockaddr,
+            std::mem::size_of_val(&a) as u32,
+        ) < 0
+        {
+            return Err(format!(
+                "vsock connect: {}",
+                std::io::Error::last_os_error()
+            ));
         }
         let mut s = Vs(ofd);
-        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: pve-identity\r\n\r\n").as_bytes()).map_err(|e| e.to_string())?;
+        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: pve-identity\r\n\r\n").as_bytes())
+            .map_err(|e| e.to_string())?;
         read_response(&mut s).map_err(|e| e.to_string())
     }
 }
@@ -78,10 +109,16 @@ fn host_get(path: &str) -> Result<(u16, Vec<u8>), String> {
 fn fetch_token(aud: &str) -> Result<(String, u64), String> {
     let (c, b) = host_get(&format!("/v1/token?aud={aud}&format=json"))?;
     if c != 200 {
-        return Err(format!("host refused ({c}): {}", String::from_utf8_lossy(&b).trim()));
+        return Err(format!(
+            "host refused ({c}): {}",
+            String::from_utf8_lossy(&b).trim()
+        ));
     }
     let v: serde_json::Value = serde_json::from_slice(&b).map_err(|e| e.to_string())?;
-    Ok((v["token"].as_str().unwrap_or("").to_string(), v["exp"].as_u64().unwrap_or(0)))
+    Ok((
+        v["token"].as_str().unwrap_or("").to_string(),
+        v["exp"].as_u64().unwrap_or(0),
+    ))
 }
 
 fn audiences() -> Result<Vec<String>, String> {
@@ -99,10 +136,15 @@ fn audiences() -> Result<Vec<String>, String> {
 }
 
 fn group_gid() -> Option<u32> {
-    std::fs::read_to_string("/etc/group").ok()?.lines().find_map(|l| {
-        let f: Vec<&str> = l.split(':').collect();
-        (f.len() > 2 && f[0] == GROUP).then(|| f[2].parse().ok()).flatten()
-    })
+    std::fs::read_to_string("/etc/group")
+        .ok()?
+        .lines()
+        .find_map(|l| {
+            let f: Vec<&str> = l.split(':').collect();
+            (f.len() > 2 && f[0] == GROUP)
+                .then(|| f[2].parse().ok())
+                .flatten()
+        })
 }
 
 fn secure(p: &Path, mode: u32, gid: Option<u32>) {
@@ -133,7 +175,10 @@ fn get_cached(cache: &Cache, aud: &str) -> Result<String, String> {
         }
     }
     let (t, exp) = fetch_token(aud)?;
-    cache.lock().unwrap().insert(aud.to_string(), (t.clone(), exp));
+    cache
+        .lock()
+        .unwrap()
+        .insert(aud.to_string(), (t.clone(), exp));
     Ok(t)
 }
 
@@ -153,7 +198,9 @@ fn serve_socket(cache: Cache, gid: Option<u32>) {
         std::thread::spawn(move || {
             let mut s = c;
             let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(5)));
-            let Ok(req) = read_request(&mut s) else { return };
+            let Ok(req) = read_request(&mut s) else {
+                return;
+            };
             let _ = match (req.path.as_str(), req.param("aud")) {
                 ("/v1/token", Some(aud)) => match get_cached(&cache, aud) {
                     Ok(t) => respond(&mut s, 200, "application/jwt", t.as_bytes()),

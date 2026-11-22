@@ -1,0 +1,8 @@
+#!/bin/sh
+# pve-identity-manager postrm: remove the integration points. On purge,
+# also remove this cluster's issuer from the registry (issuers.d/pve.json)
+# so relying-party products see pve-identity as absent. Signing keys stay
+# in /etc/pve/priv/pve-identity (cluster-wide; remove by hand).
+PREFIX="${DPKG_ROOT:-}"
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    perl - remove "$PREFIX" <<'PVE_IDENTITY_INTEGRATE_EOF' || true

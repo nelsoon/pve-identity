@@ -11,16 +11,27 @@ pub fn unb64(s: &str) -> crate::Result<Vec<u8>> {
         .map_err(|e| crate::Error::Invalid(format!("base64: {e}")))
 }
 
-pub fn sign_es256<T: serde::Serialize>(key: &SigningKey, kid: &str, claims: &T) -> crate::Result<String> {
+pub fn sign_es256<T: serde::Serialize>(
+    key: &SigningKey,
+    kid: &str,
+    claims: &T,
+) -> crate::Result<String> {
     let hdr = serde_json::json!({"alg": "ES256", "typ": "JWT", "kid": kid});
-    let si = format!("{}.{}", b64(&serde_json::to_vec(&hdr)?), b64(&serde_json::to_vec(claims)?));
+    let si = format!(
+        "{}.{}",
+        b64(&serde_json::to_vec(&hdr)?),
+        b64(&serde_json::to_vec(claims)?)
+    );
     let sig: Signature = key.sign(si.as_bytes());
     Ok(format!("{si}.{}", b64(&sig.to_bytes())))
 }
 
 /// Verify signature against a set of (kid, key); returns the payload JSON.
 /// Does not check exp/aud (callers do).
-pub fn verify_es256(token: &str, keys: &[(String, VerifyingKey)]) -> crate::Result<serde_json::Value> {
+pub fn verify_es256(
+    token: &str,
+    keys: &[(String, VerifyingKey)],
+) -> crate::Result<serde_json::Value> {
     let mut it = token.split('.');
     let (h, p, s) = match (it.next(), it.next(), it.next(), it.next()) {
         (Some(h), Some(p), Some(s), None) => (h, p, s),

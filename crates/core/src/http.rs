@@ -9,7 +9,10 @@ pub struct Request {
 
 impl Request {
     pub fn param(&self, k: &str) -> Option<&str> {
-        self.query.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
+        self.query
+            .iter()
+            .find(|(a, _)| a == k)
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -23,7 +26,10 @@ pub fn read_request<R: Read>(s: &mut R) -> std::io::Result<Request> {
         }
         buf.extend_from_slice(&b[..n]);
         if buf.len() > 8192 {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "request too large"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "request too large",
+            ));
         }
     }
     let text = String::from_utf8_lossy(&buf);
@@ -40,7 +46,11 @@ pub fn read_request<R: Read>(s: &mut R) -> std::io::Result<Request> {
             (pct_decode(k), pct_decode(v))
         })
         .collect();
-    Ok(Request { method, path: path.to_string(), query })
+    Ok(Request {
+        method,
+        path: path.to_string(),
+        query,
+    })
 }
 
 fn pct_decode(s: &str) -> String {
@@ -93,7 +103,11 @@ pub fn read_response<R: Read>(s: &mut R) -> std::io::Result<(u16, Vec<u8>)> {
         .position(|w| w == b"\r\n\r\n")
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "no header end"))?;
     let head = String::from_utf8_lossy(&all[..pos]);
-    let code = head.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+    let code = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
     Ok((code, all[pos + 4..].to_vec()))
 }
 
