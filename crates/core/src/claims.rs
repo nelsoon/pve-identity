@@ -103,7 +103,7 @@ mod tests {
             cluster: "lab".into(),
             kind: Kind::Qemu,
             vmid: 101,
-            node: "cloud1".into(),
+            node: "node1".into(),
             pool: pool.map(Into::into),
             gen: Some("g1".into()),
             zones: vec![],
