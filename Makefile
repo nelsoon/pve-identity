@@ -1,4 +1,4 @@
-VERSION := 0.1.0-1
+VERSION := 0.1.2-1
 TARGET  := x86_64-unknown-linux-musl
 REL     := target/$(TARGET)/release
 BUILD   := build

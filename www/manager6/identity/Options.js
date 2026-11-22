@@ -38,7 +38,6 @@ Ext.define('PVE.identity.ModeEdit', {
             },
         ];
         me.callParent();
-        me.load();
     },
 });
 
@@ -67,14 +66,26 @@ Ext.define('PVE.identity.OptionsRow', {
                 }
                 return PVE.identity.OptionsRow.modeText[grid.pveIdentityMode] || grid.pveIdentityMode;
             },
-            editor: caps.vms['VM.Config.Options'] ? 'PVE.identity.ModeEdit' : undefined,
+            // an object editor: run_editor passes it through (string editors
+            // get only confid + editorConfig, without pveSelNode) and loads it
+            editor: caps.vms['VM.Config.Options']
+                ? { xtype: 'pveIdentityModeEdit', pveSelNode: grid.pveSelNode } : undefined,
+        };
+        // The grid's diff store drops keys the VM config does not contain on
+        // every reload, so the row record is re-added each time.
+        let seed = () => {
+            let store = grid.getStore();
+            if (!store.getById('pveidentity')) {
+                store.add({ key: 'pveidentity', value: grid.pveIdentityMode ?? 'auto' });
+            }
         };
         let refresh = () => Proxmox.Utils.API2Request({
             url: `/cluster/identity/guests/${vmid}`,
             method: 'GET',
             success: (resp) => {
                 grid.pveIdentityMode = resp.result.data.mode;
-                if (!grid.isDestroyed) {
+                if (!grid.isDestroyed && grid.rows.pveidentity.visible !== false) {
+                    seed();
                     grid.getView().refresh();
                 }
             },
@@ -85,8 +96,6 @@ Ext.define('PVE.identity.OptionsRow', {
             },
         });
         grid.mon(grid.rstore, 'load', refresh);
-        // a row added after init must be seeded into the diff store once
-        grid.getStore().add({ key: 'pveidentity', value: 'auto' });
     },
 });
 
