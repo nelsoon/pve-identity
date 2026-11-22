@@ -43,6 +43,25 @@ fn host_get(path: &str) -> Result<(u16, Vec<u8>), String> {
         for o in [libc::SO_RCVTIMEO, libc::SO_SNDTIMEO] {
             libc::setsockopt(fd, libc::SOL_SOCKET, o, &tv as *const _ as *const _, std::mem::size_of_val(&tv) as u32);
         }
+        // Bind a reserved source port (<1024): needs CAP_NET_BIND_SERVICE in
+        // the guest, so only root can ask the host (R9).
+        let mut bound = false;
+        for port in (600..1024u32).rev() {
+            let mut l: libc::sockaddr_vm = std::mem::zeroed();
+            l.svm_family = libc::AF_VSOCK as u16;
+            l.svm_cid = libc::VMADDR_CID_ANY;
+            l.svm_port = port;
+            if libc::bind(fd, &l as *const _ as *const libc::sockaddr, std::mem::size_of_val(&l) as u32) == 0 {
+                bound = true;
+                break;
+            }
+            if std::io::Error::last_os_error().raw_os_error() != Some(libc::EADDRINUSE) {
+                break;
+            }
+        }
+        if !bound {
+            return Err("needs root: cannot bind a reserved vsock port".into());
+        }
         let mut a: libc::sockaddr_vm = std::mem::zeroed();
         a.svm_family = libc::AF_VSOCK as u16;
         a.svm_cid = HOST_CID;

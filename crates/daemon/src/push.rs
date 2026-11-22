@@ -10,7 +10,7 @@ pub const WIN_BASE: &str = "C:\\ProgramData\\pve-identity";
 pub fn push(ctx: &Ctx, vmid: u32) -> Result<String, String> {
     let mut q = Qga::connect(vmid)?;
     let os = q.osinfo_id().unwrap_or_else(|_| "unknown".into());
-    let windows = os == "mswindows";
+    let windows = os == "windows";
     for aud in ctx.audiences() {
         let (tok, _) = ctx.issue(vmid, &aud, Channel::Push).map_err(|e| e.to_string())?;
         if windows {

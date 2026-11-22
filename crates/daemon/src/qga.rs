@@ -61,8 +61,11 @@ impl Qga {
         Ok(v["return"].clone())
     }
 
+    /// "linux", "windows", or the guest's OS id (e.g. "freebsd").
+    /// qga reports `kernel-name` only on some builds; `name` is reliable.
     pub fn osinfo_id(&mut self) -> Result<String, String> {
-        Ok(self.call("guest-get-osinfo", Value::Null)?["id"].as_str().unwrap_or("unknown").to_string())
+        let v = self.call("guest-get-osinfo", Value::Null)?;
+        Ok(classify(&v))
     }
 
     pub fn exec(&mut self, path: &str, args: &[&str]) -> Result<i64, String> {
@@ -92,4 +95,28 @@ impl Qga {
 fn rand_id() -> u32 {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     (t.subsec_nanos() ^ std::process::id()) & 0x7fff_ffff
+}
+
+pub fn classify(v: &Value) -> String {
+    let f = |k: &str| v[k].as_str().unwrap_or("").to_lowercase();
+    if f("id") == "mswindows" || f("kernel-name").starts_with("windows") {
+        "windows".into()
+    } else if f("kernel-name") == "linux" || f("name").contains("linux") {
+        "linux".into()
+    } else if !f("id").is_empty() {
+        f("id")
+    } else {
+        "unknown".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn os() {
+        let c = |s: &str| super::classify(&serde_json::from_str(s).unwrap());
+        assert_eq!(c(r#"{"id":"debian","name":"Debian GNU/Linux"}"#), "linux");
+        assert_eq!(c(r#"{"id":"freebsd","name":"FreeBSD"}"#), "freebsd");
+        assert_eq!(c(r#"{"id":"mswindows","name":"Microsoft Windows 11"}"#), "windows");
+    }
 }

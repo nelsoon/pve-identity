@@ -100,11 +100,19 @@ pub fn serve(ctx: Arc<Ctx>) -> std::io::Result<()> {
         let mut st = VsockStream(unsafe { OwnedFd::from_raw_fd(fd) });
         let ctx = ctx.clone();
         let cid = a.svm_cid;
+        let a = a;
         std::thread::spawn(move || {
             // Kernel-assigned peer CID is the identity; the VM must run here
             // with exactly that CID (lab T0.2).
+            if a.svm_port >= 1024 {
+                crate::log(format!("refuse vsock cid={cid} port={} reason=\"unprivileged source port\"", a.svm_port));
+                let _ = pve_identity_core::http::read_request(&mut st);
+                let _ = pve_identity_core::http::respond(&mut st, 403, "text/plain", b"privileged source port required\n");
+                return;
+            }
             if cid < 100 || !running_cid_matches(cid) {
                 crate::log(format!("refuse vsock cid={cid} reason=\"no local VM with this CID\""));
+                let _ = pve_identity_core::http::read_request(&mut st);
                 let _ = pve_identity_core::http::respond(&mut st, 403, "text/plain", b"unknown guest\n");
                 return;
             }
