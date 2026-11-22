@@ -1,0 +1,12 @@
+[Unit]
+Description=pve-identity issuer daemon (guest identity tokens)
+After=pve-cluster.service
+Requires=pve-cluster.service
+
+[Service]
+ExecStart=/usr/sbin/pve-identityd
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
